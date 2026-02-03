@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
+import os
 
 from matplotlib.patches import Rectangle
 
@@ -9,7 +10,7 @@ from CustomTree.customTree import CustomDecisionTree
 
 
 
-def visualize_custom_tree(tree: CustomDecisionTree, figsize=(18, 10)):
+def visualize_custom_tree(tree: CustomDecisionTree, figsize=(18, 10), save_path=None):
     """
     Draw the custom decision tree using networkx + matplotlib.
     """
@@ -57,6 +58,9 @@ def visualize_custom_tree(tree: CustomDecisionTree, figsize=(18, 10)):
     )
 
     plt.title("Custom Decision Tree")
+    if save_path:
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
     plt.show()
 
 def hierarchy_pos(G, root, width=1.0, vert_gap=0.2, vert_loc=0, xcenter=0.5):

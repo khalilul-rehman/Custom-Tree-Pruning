@@ -90,6 +90,7 @@ def gurobi_minimax(X_leaf, y_leaf, verbose=False):
         # License-size fallback or other Gurobi errors
         if "Model too large for size-limited license" in str(e):
             # Define this in your codebase
+            print("Gurobi encountered an error:", str(e))
             print("Gurobi encountered an error. Falling back to CVXPY solver.")
             return cvxpy_minimax(X_leaf, y_leaf)
         raise

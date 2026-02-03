@@ -1,9 +1,10 @@
+import os
 import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
 from CustomTree.customTree import CustomDecisionTree
 
-def plot_tree_partitions_plotly(tree: CustomDecisionTree, X: np.ndarray, leaf_colorscale=None):
+def plot_tree_partitions_plotly(tree: CustomDecisionTree, X: np.ndarray, leaf_colorscale=None, save_path=None):
     """
     Plot partitions of a custom tree using Plotly.
     Works for 2D (rectangles) or 3D (cuboids) automatically based on X.shape[1].
@@ -83,6 +84,10 @@ def plot_tree_partitions_plotly(tree: CustomDecisionTree, X: np.ndarray, leaf_co
             width=700, height=600
         )
         fig.show()
+        if save_path:
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            fig.write_image(save_path)
+            fig.write_html(save_path.replace('.png', '.html'))
 
     # --- 3D Plot ---
     elif n_features == 3:
@@ -121,6 +126,10 @@ def plot_tree_partitions_plotly(tree: CustomDecisionTree, X: np.ndarray, leaf_co
             height=700
         )
         fig.show()
+        if save_path:
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            fig.write_image(save_path)
+            fig.write_html(save_path.replace('.png', '.html'))
 
 
 

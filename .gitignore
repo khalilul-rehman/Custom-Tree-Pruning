@@ -1,1 +1,11 @@
 /venv/
+/datasets/
+/graphs/trees/
+/graphs/partitions/
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.html
+*.pdf
