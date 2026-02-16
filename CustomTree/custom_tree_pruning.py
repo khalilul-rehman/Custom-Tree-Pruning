@@ -145,69 +145,160 @@ def get_custom_cost_function(alpha=0.01, cost_type="basic"):
 
 
 
-def global_greedy_prune_with_custom_cost(tree, X, y, cost_fn, plot_tree_each_iteration=False, alpha=0.01, verbose=False):
+# def global_greedy_prune_with_custom_cost(tree, X, y, cost_fn, plot_tree_each_iteration=False, alpha=0.01, verbose=False):
+#     """
+#     Greedy bottom-up pruning using a user-provided cost function.
+#     The cost function must accept:
+#         - leaf_h_values: list of h values of current leaves
+#         - num_leaves: number of leaves
+#         Returns a numeric cost.
+#     """
+#     iteration = 0
+
+#     while True:
+#         iteration += 1
+
+#         # Current leaves and their h values
+#         leaves = tree.get_leaves()
+#         leaf_h_values = [l.h for l in leaves]
+#         num_leaves = len(leaves)
+#         keep_cost = cost_fn(leaf_h_values, num_leaves, alpha)
+
+#         best_delta = 0.0
+#         best_node = None
+#         best_h = None
+
+#         candidates = get_prunable_parents(tree)
+#         if not candidates:
+#             break
+
+#         if verbose:
+#             print(f"[ITER {iteration}] candidates for pruning: {len(candidates)}")
+
+#         for node in candidates:
+#             left, right = node.left_child, node.right_child
+
+#             # compute h for parent on demand
+#             M_val, m0_val, h_parent = gurobi_minimax(
+#                 X[node.sample_indices],
+#                 y[node.sample_indices]
+#             )
+
+#             # simulate pruning: remove child leaves from the calculation
+#             simulated_leaf_h = [h for h in leaf_h_values if h not in (left.h, right.h)] + [h_parent]
+#             simulated_num_leaves = num_leaves - 1  # pruning two leaves into one
+
+#             new_cost = cost_fn(simulated_leaf_h, simulated_num_leaves, alpha)
+
+#             delta = new_cost - keep_cost
+#             if verbose:
+#                 print(f"  Node {node.node_id}: delta={delta:.4f}")
+
+#             if delta < best_delta:
+#                 best_delta = delta
+#                 best_node = node
+#                 best_h = (M_val, m0_val, h_parent)
+
+#         if best_node is None:
+#             if verbose:
+#                 print("No more improving prunes.")
+#             break
+
+#         if verbose:
+#             print(f"[ITER {iteration}] Pruning node {best_node.node_id} with delta={best_delta:.4f}")
+
+#         # Apply best prune
+#         collapse_node(tree, best_node, X, y)
+
+#         if plot_tree_each_iteration:
+#             visualize_custom_tree(tree)
+
+
+def global_greedy_prune_with_custom_cost(
+    tree, X, y, cost_fn,
+    plot_tree_each_iteration=False,
+    alpha=0.01,
+    verbose=False
+):
     """
     Greedy bottom-up pruning using a user-provided cost function.
-    The cost function must accept:
-        - leaf_h_values: list of h values of current leaves
-        - num_leaves: number of leaves
-        Returns a numeric cost.
+
+    Correct simulation: removes the two *specific* child leaves by identity
+    (node_id), not by their h-value (which can collide).
+
+    cost_fn(leaf_h_values, num_leaves, alpha) -> float
     """
     iteration = 0
 
     while True:
         iteration += 1
 
-        # Current leaves and their h values
+        # Current leaves and their h values (keep mapping by identity!)
         leaves = tree.get_leaves()
-        leaf_h_values = [l.h for l in leaves]
+        leaf_h_by_id = {leaf.node_id: leaf.h for leaf in leaves}
         num_leaves = len(leaves)
-        keep_cost = cost_fn(leaf_h_values, num_leaves, alpha)
+
+        keep_cost = cost_fn(list(leaf_h_by_id.values()), num_leaves, alpha)
 
         best_delta = 0.0
         best_node = None
-        best_h = None
+        best_parent_fit = None  # (M_val, m0_val, h_parent)
 
         candidates = get_prunable_parents(tree)
         if not candidates:
+            if verbose:
+                print(f"[ITER {iteration}] no candidates, stopping.")
             break
 
         if verbose:
-            print(f"[ITER {iteration}] candidates for pruning: {len(candidates)}")
+            print(f"[ITER {iteration}] candidates for pruning: {len(candidates)}  | leaves={num_leaves}  cost={keep_cost:.6f}")
 
         for node in candidates:
             left, right = node.left_child, node.right_child
 
-            # compute h for parent on demand
+            # Safety: ensure we are really pruning two leaves
+            if left is None or right is None or (not left.is_leaf) or (not right.is_leaf):
+                continue
+
+            # compute h for parent on demand (expensive)
             M_val, m0_val, h_parent = gurobi_minimax(
                 X[node.sample_indices],
                 y[node.sample_indices]
             )
 
-            # simulate pruning: remove child leaves from the calculation
-            simulated_leaf_h = [h for h in leaf_h_values if h not in (left.h, right.h)] + [h_parent]
-            simulated_num_leaves = num_leaves - 1  # pruning two leaves into one
+            # simulate pruning by leaf identity (node_id)
+            simulated_leaf_h_by_id = dict(leaf_h_by_id)  # shallow copy
 
-            new_cost = cost_fn(simulated_leaf_h, simulated_num_leaves, alpha)
+            # remove the two child leaves
+            simulated_leaf_h_by_id.pop(left.node_id, None)
+            simulated_leaf_h_by_id.pop(right.node_id, None)
 
+            # add the collapsed parent leaf (use parent node_id)
+            simulated_leaf_h_by_id[node.node_id] = h_parent
+
+            simulated_leaf_h_values = list(simulated_leaf_h_by_id.values())
+            simulated_num_leaves = len(simulated_leaf_h_values)
+
+            new_cost = cost_fn(simulated_leaf_h_values, simulated_num_leaves, alpha)
             delta = new_cost - keep_cost
+
             if verbose:
-                print(f"  Node {node.node_id}: delta={delta:.4f}")
+                print(f"  Node {node.node_id}: new_cost={new_cost:.6f} delta={delta:.6f}")
 
             if delta < best_delta:
                 best_delta = delta
                 best_node = node
-                best_h = (M_val, m0_val, h_parent)
+                best_parent_fit = (M_val, m0_val, h_parent)
 
         if best_node is None:
             if verbose:
-                print("No more improving prunes.")
+                print(f"[ITER {iteration}] No more improving prunes. stopping.")
             break
 
         if verbose:
-            print(f"[ITER {iteration}] Pruning node {best_node.node_id} with delta={best_delta:.4f}")
+            print(f"[ITER {iteration}] Pruning node {best_node.node_id} with delta={best_delta:.6f}")
 
-        # Apply best prune
+        # Apply prune
         collapse_node(tree, best_node, X, y)
 
         if plot_tree_each_iteration:

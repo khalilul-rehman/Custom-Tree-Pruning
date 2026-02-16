@@ -30,6 +30,7 @@ class CustomTreeNode:
         self.h=None
         self.M=None
         self.M_0=None
+        self.epsilon=None
 
     def __repr__(self):
         if self.is_leaf:
