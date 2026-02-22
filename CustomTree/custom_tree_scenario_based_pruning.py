@@ -1,6 +1,9 @@
 # CustomTree/pruning_scenario.py
 
 import numpy as np
+from scipy.special import comb
+from scipy.optimize import bisect
+
 from CustomTree.quadratic_constraint_optimization import gurobi_minimax
 
 try:
@@ -10,24 +13,75 @@ except Exception:
     visualize_custom_tree = None
 
 
+
+
 # ------------------------------------------------------------
 # Scenario epsilon
 # ------------------------------------------------------------
-def scenario_epsilon(num_samples: int, d_eff: int, beta: float = 1e-6) -> float:
-    """
-    Conservative explicit scenario bound (common form):
-        eps = (2/N) * (d_eff - 1 + log(1/beta))
-    If N <= d_eff - 1 => bound is vacuous => eps = 1.
+# def scenario_epsilon(num_samples: int, d_eff: int, beta: float = 1e-6) -> float:
+#     """
+#     Conservative explicit scenario bound (common form):
+#         eps = (2/N) * (d_eff - 1 + log(1/beta))
+#     If N <= d_eff - 1 => bound is vacuous => eps = 1.
 
-    Returns eps clipped to [0, 1].
+#     Returns eps clipped to [0, 1].
+#     """
+#     N = int(num_samples)
+#     if N <= max(d_eff - 1, 0):
+#         return 1.0
+
+#     eps = (2.0 / N) * (d_eff - 1 + np.log(1.0 / beta))
+#     return float(np.clip(eps, 0.0, 1.0))
+def scenario_epsilon(num_samples: int, d_eff: int, beta: float = 1e-6, tol=1e-8) -> float:
     """
-    N = int(num_samples)
-    if N <= max(d_eff - 1, 0):
+    Compute epsilon for the scenario approach.
+
+    Parameters
+    ----------
+    num_samples : int
+        Number of scenarios
+    d_eff : int
+        Effective support rank (usually number of decision variables)
+    beta : float
+        Confidence parameter (e.g., 1e-6)
+    tol : float
+        Numerical tolerance
+
+    Returns
+    -------
+    epsilon : float
+        Violation probability bound
+    """
+
+    # ---- SAFETY CHECKS ----
+    if num_samples <= 0:
+        return 1.0   # no data, worst-case bound
+
+    if num_samples <= d_eff:
+        return 1.0   # theory not valid
+    
+
+    def tail_probability(eps):
+        return sum(
+            comb(num_samples, i) * (eps**i) * ((1 - eps)**(num_samples - i))
+            for i in range(d_eff)
+        )
+
+    f0 = tail_probability(0.0) - beta
+    f1 = tail_probability(1.0) - beta
+
+    # If no sign change, return safe bound
+    if f0 * f1 > 0:
         return 1.0
 
-    eps = (2.0 / N) * (d_eff - 1 + np.log(1.0 / beta))
-    return float(np.clip(eps, 0.0, 1.0))
+    epsilon = bisect(
+        lambda eps: tail_probability(eps) - beta,
+        0.0,
+        1.0,
+        xtol=tol
+    )
 
+    return epsilon
 
 # ------------------------------------------------------------
 # Utilities: candidates + metric computation
@@ -167,7 +221,7 @@ def global_greedy_prune_with_scenario_cost(
     X,
     y,
     alpha: float,
-    # d_eff: int,
+    d_eff: int = None,
     beta: float = 1e-6,
     plot_tree_each_iteration: bool = False,
     verbose: bool = False,
@@ -189,14 +243,15 @@ def global_greedy_prune_with_scenario_cost(
     if plot_tree_each_iteration and visualize_custom_tree is None:
         raise RuntimeError("plot_tree_each_iteration=True but visualize_custom_tree could not be imported.")
 
-    d_eff = compute_d_eff_from_data(X, y, include_h=True)
+    if d_eff is None:
+        d_eff = compute_d_eff_from_data(X, y, include_h=True)
 
     iteration = 0
 
     while True:
         iteration += 1
 
-        # Ensure all leaves have h/epsilon
+        # Ensure all leaves have h & epsilon
         ensure_all_leaves_have_metrics(tree, X, y, d_eff=d_eff, beta=beta, verbose=verbose)
 
         leaves = tree.get_leaves()
