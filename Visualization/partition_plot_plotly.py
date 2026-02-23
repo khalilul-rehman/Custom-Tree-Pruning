@@ -86,7 +86,11 @@ def plot_tree_partitions_plotly(tree: CustomDecisionTree, X: np.ndarray, leaf_co
         fig.show()
         if save_path:
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
-            fig.write_image(save_path)
+            # fig.write_image(save_path)
+            try:
+                fig.write_image(save_path)
+            except Exception as e:
+                print(f"Image export failed: {e}. Saving HTML only.")
             fig.write_html(save_path.replace('.png', '.html'))
 
     # --- 3D Plot ---
@@ -128,7 +132,11 @@ def plot_tree_partitions_plotly(tree: CustomDecisionTree, X: np.ndarray, leaf_co
         fig.show()
         if save_path:
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
-            fig.write_image(save_path)
+            # fig.write_image(save_path)
+            try:
+                fig.write_image(save_path)
+            except Exception as e:
+                print(f"Image export failed: {e}. Saving HTML only.")
             fig.write_html(save_path.replace('.png', '.html'))
 
 
